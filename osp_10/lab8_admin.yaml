@@ -6,19 +6,19 @@ parameters:
   project_name:
     type: string
     description: Project name that will be created it.
-    default: tenant1
+    default: 'tenant1'
   user_role:
     type: string
     description: User role to be assigned.
-    default: ResellerAdmin
+    default: 'ResellerAdmin'
   project_user:
     type: string
     description: User to be created inside the project.
-    default: user1
+    default: 'user1'
   project_user_passwd:
     type: string
     description: Password for the project defined user
-    default: redhat
+    default: 'redhat'
   provider_net_cidr:
     type: string
     description: CIDR for the provider(external) network
@@ -35,6 +35,38 @@ parameters:
     type: string
     description: end of the IP pool for the external network
     default: 192.168.122.200
+  tenant_net_name:
+    type: string
+    description: Name of the tenant network.
+    default: 'net1'
+  tenant_subnet_name:
+    type: string
+    description: Name of the tenant subnet.
+    default: 'subnet1'
+  tenant_router_name:
+    type: string
+    description: Name of the tenant router.
+    default: 'router1'
+  tenant_net_cidr:
+    type: string
+    description: CIDR for the tenant network
+    default: 192.168.1.0/24
+  tenant_net_gateway:
+    type: string
+    description: gateway for the tenant network
+    default: 192.168.1.254
+  tenant_net_name:
+    type: string
+    description: name for the tenant network
+    default: net1
+  tenant_net_pool_start:
+    type: string
+    description: network pool start. typically .11 of whatever /24 is defined
+    default: 192.168.1.10
+  tenant_net_pool_end:
+    type: string
+    description: network pool end. typically .200 of whatever /24 is defined
+    default: 192.168.1.100
 
 resources:
   glance_image_upload:
@@ -44,7 +76,7 @@ resources:
       container_format: bare
       disk_format: qcow2
       location: http://download.cirros-cloud.net/0.3.4/cirros-0.3.4-x86_64-disk.img
-      name: cirros_0.3.4-x86_64
+      name: cirros-0.3.4-x86_64
       os_distro: CirrOS
       owner: admin
       protected: False
@@ -97,20 +129,6 @@ resources:
         - role: { get_param: user_role}
           project: { get_resource: openstack_project }
 
-  security_group:
-    type: OS::Neutron::SecurityGroup
-    properties:
-      name: the_sg
-      description: Ping and SSH
-      rules:
-      - protocol: icmp
-      - protocol: tcp
-        port_range_min: 22
-        port_range_max: 22
-      - protocol: tcp
-        port_range_min: 5000
-        port_range_max: 5000
-
   tenant_net:
     type: OS::Neutron::Net
     properties:
@@ -120,6 +138,7 @@ resources:
   tenant_subnet:
     type: OS::Neutron::Subnet
     properties:
+      name: { get_param: tenant_subnet_name }
       network_id: { get_resource: tenant_net }
       cidr: { get_param: tenant_net_cidr }
       gateway_ip: { get_param: tenant_net_gateway }
@@ -131,6 +150,7 @@ resources:
   tenant_router:
     type: OS::Neutron::Router
     properties:
+      name: { get_param: tenant_router_name }
       external_gateway_info:
         network: { get_resource: provider_network }
 
