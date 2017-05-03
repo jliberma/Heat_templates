@@ -1,0 +1,50 @@
+heat_template_version: 2014-10-16
+
+description: >
+  Configure all events via script since not all the required parameters are in the puppet files
+  anyway.
+parameters:
+  servers:
+    type: json
+
+resources:
+  ExtraConfig:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: script
+      config: |
+        #!/bin/bash
+        # ceilometer.conf changes
+        crudini --set /etc/ceilometer/ceilometer.conf event drop_unmatched_notifications true
+        crudini --set /etc/ceilometer/ceilometer.conf database metering_time_to_live 86400
+        crudini --set /etc/ceilometer/ceilometer.conf database event_time_to_live 86400
+        crudini --set /etc/ceilometer/ceilometer.conf notification store_events true
+        crudini --set /etc/ceilometer/ceilometer.conf oslo_messaging_notifications driver noop
+        crudini --set /etc/ceilometer/ceilometer.conf oslo_messaging_notifications topics notifications,versioned_notifications
+        # swift-proxy
+        crudini --set /etc/swift/proxy-server.conf filter:ceilometer driver noop
+        # keystone changes
+        crudini --set /etc/keystone/keystone.conf oslo_messaging_notifications driver noop
+        # nova.conf
+        crudini --set /etc/nova/nova.conf DEFAULT notify_on_state_change vm_and_task_state
+        crudini --set /etc/nova/nova.conf DEFAULT instance_usage_audit true
+        crudini --set /etc/nova/nova.conf DEFAULT instance_usage_audit_period hour
+        crudini --set /etc/nova/nova.conf DEFAULT notify_on_any_change true
+        crudini --set /etc/nova/nova.conf oslo_messaging_notifications driver messaging
+        crudini --set /etc/nova/nova.conf oslo_messaging_notifications topics notifications
+        # heat
+        crudini --set /etc/heat/heat.conf oslo_messaging_notifications driver messaging
+        crudini --set /etc/heat/heat.conf oslo_messaging_notifications topics notifications
+        # glance-api.conf
+        crudini --set /etc/glance/glance-api.conf oslo_messaging_notifications driver messaging
+        crudini --set /etc/glance/glance-api.conf oslo_messaging_notifications topics notifications
+        # neutron.conf
+        crudini --set /etc/neutron/neutron.conf oslo_messaging_notifications driver messaging
+        crudini --set /etc/neutron/neutron.conf oslo_messaging_notifications topics notifications
+
+  ExtraDeployments:
+    type: OS::Heat::SoftwareDeploymentGroup
+    properties:
+      config: { get_resource: ExtraConfig }
+      servers: { get_param: servers }
+      actions: ['CREATE', 'UPDATE']

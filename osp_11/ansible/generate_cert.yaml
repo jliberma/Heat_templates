@@ -1,0 +1,88 @@
+---
+- name: Generate Self Signing CA and Cert for Overcloud Deployment
+  hosts: localhost
+  become: true
+  vars:
+    ipaddr: 10.9.70.100
+    chdir: /home/stack/ssl
+  tasks:
+    - name: Create /home/stack/ssl directory
+      file:
+        dest: "{{ chdir }}"
+        state: directory
+        owner: stack
+        group: stack
+        mode: 0700
+
+    - name: Gen ca.key.pem
+      shell: openssl genrsa -out ca.key.pem 4096
+      become: false
+      args:
+        chdir: "{{ chdir }}"
+
+    - name: generate ca.crt.pem
+      shell: "openssl req -key ca.key.pem -new -x509 -days 7300 -extensions v3_ca -out ca.crt.pem  -subj '/C=US/ST=California/L=Carlsbad/O=Dis/CN={{ ipaddr }}'"
+      become: false
+      args:
+        chdir: "{{ chdir }}"
+
+    - name: copy ca.crt.pem
+      copy:
+        src: "{{ chdir }}/ca.crt.pem"
+        dest: /etc/pki/ca-trust/source/anchors/ca.crt.pem
+        remote_src: true
+  
+    - name: update ca trust
+      shell: update-ca-trust extract
+
+    - name: Generate SSL Key
+      become: false
+      shell: openssl genrsa -out server.key.pem 2048
+      args:
+        chdir: "{{ chdir }}"
+
+    - name: Copy openssl.cnf
+      copy:
+        src: /etc/pki/tls/openssl.cnf
+        dest: "{{ chdir }}/openssl.cnf"
+        owner: stack
+        group: stack
+        mode: 0644
+
+    - name: openssl.cnf file updates section
+      ini_file:
+        dest: "{{ chdir }}/openssl.cnf"
+        option: "{{ item.key }}"
+        value: "{{ item.value }}"
+        section: "{{ item.section }}"
+        backup: no
+      with_items:
+        - { key: 'req_extensions', section: 'req', value: 'v3_req' }
+        - { key: basicConstraints, value: "CA:FALSE", section: 'v3_req' }
+        - { key: keyUsage, value: "nonRepudiation, digitalSignature, keyEncipherment", section: v3_req }
+        - { key: subjectAltName, value: "@alt_names", section: v3_req }
+        - { key: "IP.1", value: "{{ ipaddr }}", section: alt_names }
+
+    - name: generate csr
+      become: false
+      shell: openssl req -config openssl.cnf -key server.key.pem -new -out server.csr.pem -subj '/C=US/ST=California/L=Carlsbad/O=Dis/CN={{ ipaddr }}'
+      args:
+        chdir: "{{ chdir }}"
+
+    - name: create index.txt file
+      file:
+        state: touch
+        path: /etc/pki/CA/index.txt
+
+    - name: Create serial file
+      file:
+        state: touch
+        path: /etc/pki/CA/serial
+
+    - name: put string in serial
+      shell: echo $(date '+%s') > /etc/pki/CA/serial
+
+    - name: generate ssl crt
+      shell: openssl ca -config openssl.cnf -extensions v3_req -days 7300 -in server.csr.pem -out server.crt.pem -cert ca.crt.pem -keyfile ca.key.pem -batch
+      args:
+        chdir: "{{ chdir }}"
